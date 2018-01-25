@@ -100,7 +100,7 @@ Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 FieldConfig <- c("Omega1"=5, "Epsilon1"=5, "Omega2"=5, "Epsilon2"=5) 
 RhoConfig <- c("Beta1"=0, "Beta2"=0, "Epsilon1"=0, "Epsilon2"=0) 
 OverdispersionConfig <- c("Vessel"=0, "VesselYear"=0)
-ObsModel <- c(2, 0) #Gamma distributed catch rates, encounter probabilities conventional
+ObsModel <- c(1, 0) #Gamma distributed catch rates, encounter probabilities conventional
 #delta model
 
 #Specify options

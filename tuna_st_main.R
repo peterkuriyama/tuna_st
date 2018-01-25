@@ -72,6 +72,8 @@ bet_comps_annual <- bet_comps %>% group_by(lat, lon, year, spp) %>%
 #Just to get model to fit
 bet_comps_annual <- bet_comps_annual %>% filter(year >= 1990)
 
+#Fill the missing values
+
 #-----------------------------------------------------------------------------------------------------
 #VAST Model
 
@@ -89,7 +91,7 @@ Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 FieldConfig <- c("Omega1"=4, "Epsilon1"=4, "Omega2"=4, "Epsilon2"=4) 
 RhoConfig <- c("Beta1"=0, "Beta2"=0, "Epsilon1"=0, "Epsilon2"=0) 
 OverdispersionConfig <- c("Vessel"=0, "VesselYear"=0)
-ObsModel <- c(2, 3) #Gamma distributed catch rates, encounter probabilities conventional
+ObsModel <- c(2, 0) #Gamma distributed catch rates, encounter probabilities conventional
 #delta model
 
 #Specify options

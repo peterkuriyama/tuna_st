@@ -80,7 +80,8 @@ bet_complete <- bet_comps_annual %>% complete(spp, nesting(lat, lon, year),
 bet_complete %>% filter(lat == -32.5, lon == -95, year == 1993)
 
 #Overwrite old version with filled version
-bet_comps_annual <- bet_complete
+bet_comps_annual <- bet_complete %>% filter(year >= 1986)
+unique(bet_comps_annual$year)[order(unique(bet_comps_annual$year))]
 
 #-----------------------------------------------------------------------------------------------------
 #VAST Model
@@ -161,6 +162,8 @@ TmbData = VAST::Data_Fn("Version" = Version, "FieldConfig" = FieldConfig,
   "a_xl" = Spatial_List$a_xl, 
   "MeshList"=Spatial_List$MeshList, "GridList"=Spatial_List$GridList, 
   "Method"=Spatial_List$Method, "Options"=Options )
+
+# hist(dat$cpue, breaks = 50)
 
 TmbList = VAST::Build_TMB_Fn("TmbData" = TmbData, 
   "RunDir" = DateFile, 

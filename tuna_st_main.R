@@ -17,6 +17,7 @@ library(plyr)
 library(VAST)
 library(tidyverse)
 library(SpatialDeltaGLMM)
+library(reshape2)
 source("Grid_Fn.R")
 #-----------------------------------------------------------------------------------------------------
 #Read in Data
@@ -29,6 +30,39 @@ bet_catch <- bill_catch %>% filter(Flag == "JPN") %>% select(Year, Month, Flag,
 bet_numbers <- bill_numbers %>% filter(Flag == "JPN") %>% select(Year, Month, Flag,
   LatC5, LonC5, Hooks, BETn, BETmt)
 
+#Change column formatting
+bet_numbers <- plyr::rename(bet_numbers, c("LatC5" = "Lat", "LonC5" = "Lon"))
+names(bet_numbers) <- tolower(names(bet_numbers))
+
+#Calculate annual values
+bet_numbers_annual <- bet_numbers %>% group_by(year, lat, lon) %>% 
+  summarize(hooks = sum(hooks), betn = sum(betn)) %>% as.data.frame
+
+bet_numbers_complete <- bet_numbers_annual %>% complete(year, nesting(lat, lon), 
+  fill = list(hooks = 0, betn = 0)) 
+
+#Check proportion of zeroes
+bet_numbers_complete %>% group_by(year) %>% 
+  summarize(zeroes = length(which(betn == 0)),
+    nrowz = length(betn), prop_zero = zeroes / nrowz) %>% tail
+bet_numbers_complete$cpue <- bet_numbers_complete$betn
+bet_numbers_complete$spp <- 1
+bet_numbers_annual <- bet_numbers_complete
+
+###plot the data to see what things look like
+world_map <- map_data("world")
+plot_numbers <- bet_numbers_annual %>% group_by(lat, lon) %>% summarize(cpue = sum(cpue)) 
+
+ggplot() + geom_raster(data = plot_numbers, aes(x = lon, y = lat, fill = cpue)) + 
+  scale_fill_gradient(low = 'white', high = 'red') +
+  geom_map(data = world_map, map = world_map,
+    aes(x = long, y = lat, map_id = region)) + 
+  scale_x_continuous(limits = c(-148, -72)) + 
+  scale_y_continuous(limits = c(-43, 48)) + theme_bw()
+  
+# bet_complete <- bet_co_annual %>% complete(spp, nesting(lat, lon, year),
+#   fill = list(cpue = 0)) %>% as.data.frame
+
 #---------------------------------
 #Composition data
 bet_comps <- read.csv("data/bet_length_comps.csv", stringsAsFactors = FALSE)
@@ -40,48 +74,69 @@ expd_inds <- rep(expd_inds$ind, expd_inds[, 1])
 
 bet_comps_expd <- bet_comps[expd_inds, ]
 
-#Check plot of length comps through time
-# ggplot(bet_comps_expd) + geom_histogram(aes(x = Bin)) + facet_wrap(~ Year)
+#**assign 'spp' values for different length classes**#
+#Specify number of length classes here, using 3 now
+nspp <- 1
+bet_comps_expd$spp <- ntile(bet_comps_expd$Bin, nspp)
+names(bet_comps_expd) <- tolower(names(bet_comps_expd))
+
+the_bins <- bet_comps_expd %>% group_by(spp) %>% summarize(mins = round(min(bin), -1), 
+  maxes = round(max(bin), -1)) %>% as.data.frame
+
+#reclassify the species
+for(ii in the_bins$spp){
+  #First bin
+  if(ii == 1){
+    bet_comps_expd[which(bet_comps_expd$bin <= the_bins$maxes[1]), 'spp'] <- 1    
+  }
+
+  if(ii %in% c(1, max(the_bins$spp)) == FALSE){
+    the_inds <- which(bet_comps_expd$bin > the_bins$mins[ii] &
+      bet_comps_expd$bin <= the_bins$maxes[ii])    
+  }
+
+  #Last bin
+  if(ii == max(the_bins$spp)){
+    bet_comps_expd[which(bet_comps_expd$bin > the_bins$maxes[ii]), 'spp'] <- max(the_bins$spp)
+  }
+}
 
 #Treat certain length bins as species
-#bins are (<=60, 80, 100, 120, >=120)
-#60 was too small, keep minimum at 80
-names(bet_comps) <- tolower(names(bet_comps))
-bet_comps$spp <- 1
-bet_comps[which(bet_comps$bin > 60 & bet_comps$bin <= 80), 'spp'] <- 2
-bet_comps[which(bet_comps$bin > 80 & bet_comps$bin <= 100), 'spp'] <- 3
-bet_comps[which(bet_comps$bin > 100 & bet_comps$bin <= 120), 'spp'] <- 4
-bet_comps[which(bet_comps$bin > 120), 'spp'] <- 5
-
-#60 was too small, keep minimum at 80
-# bet_comps$spp <- 1
-# bet_comps[which(bet_comps$bin > 80 & bet_comps$bin <= 100), 'spp'] <- 2
-# bet_comps[which(bet_comps$bin > 100 & bet_comps$bin <= 120), 'spp'] <- 3
-# bet_comps[which(bet_comps$bin > 120), 'spp'] <- 4
+names(bet_comps_expd) <- tolower(names(bet_comps_expd))
+bet_comps_annual <- bet_comps_expd %>% group_by(lat, lon, year,
+  spp) %>% summarize(cpue = sum(freq)) %>% as.data.frame
 
 #Consider 'CPUE' to be numbers of fish
 #**might make this numbers/nhooks in the future**
-bet_comps1 <- bet_comps %>% group_by(lat, lon, year, quarter, spp) %>% 
-  summarize(cpue = sum(freq))
+# bet_comps1 <- bet_comps %>% group_by(lat, lon, year, quarter, spp) %>% 
+#   summarize(cpue = sum(freq))
 
 #**Use annual "cpue" for now can also switch to include the quarter columns
-bet_comps_annual <- bet_comps %>% group_by(lat, lon, year, spp) %>% 
-  summarize(cpue = sum(freq)) %>% as.data.frame
+# bet_comps_annual <- bet_comps %>% group_by(lat, lon, year, spp) %>% 
+#   summarize(cpue = sum(freq)) %>% as.data.frame
 
 #**Also filter data so year >= 1990**
 #Just to get model to fit
 # bet_comps_annual <- bet_comps_annual %>% filter(year >= 1990)
 
 #Fill the missing values
-bet_comps_annual
+# bet_comps_annual
 
 bet_complete <- bet_comps_annual %>% complete(spp, nesting(lat, lon, year),
-  fill = list(cpue = 0))
-bet_complete %>% filter(lat == -32.5, lon == -95, year == 1993)
+  fill = list(cpue = 0)) %>% as.data.frame
+
+#Look at proportion of zeroes
+bet_complete %>% filter(year >= 1986) %>% group_by( spp, year) %>% summarize(nzeroes = length(which(cpue == 0)),
+  nrows = length(cpue), prop_zeroes = nzeroes / nrows) %>% as.data.frame
+
+bet_complete %>% group_by(lat, lon, spp, year) %>% summarize(nzeroes = length(which(cpue == 0)),
+  nrows = length(cpue), prop_zeroes = nzeroes / nrows) %>% as.data.frame
+
+bet_comps_annual
 
 #Overwrite old version with filled version
 bet_comps_annual <- bet_complete %>% filter(year >= 1986)
-unique(bet_comps_annual$year)[order(unique(bet_comps_annual$year))]
+# unique(bet_comps_annual$year)[order(unique(bet_comps_annual$year))]
 
 #-----------------------------------------------------------------------------------------------------
 #VAST Model
@@ -97,10 +152,10 @@ Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 #Specify spatial and temporal autocorrelation
 #Fieldconfig is 5 because there are five size categories
 # FieldConfig <- c("Omega1"=5, "Epsilon1"=5, "Omega2"=5, "Epsilon2"=5) 
-FieldConfig <- c("Omega1"=5, "Epsilon1"=5, "Omega2"=5, "Epsilon2"=5) 
-RhoConfig <- c("Beta1"=0, "Beta2"=0, "Epsilon1"=0, "Epsilon2"=0) 
+FieldConfig <- c("Omega1"=1, "Epsilon1"=1, "Omega2"=1, "Epsilon2"=1) 
+RhoConfig <- c("Beta1"=0, "Beta2"=0, "Epsilon1"=0, "Epsilon2"=0) #Parameters among years
 OverdispersionConfig <- c("Vessel"=0, "VesselYear"=0)
-ObsModel <- c(1, 0) #Gamma distributed catch rates, encounter probabilities conventional
+ObsModel <- c(2, 0) #Gamma distributed catch rates, encounter probabilities conventional
 #delta model
 
 #Specify options
@@ -122,7 +177,13 @@ capture.output( Record, file=paste0(DateFile,"Record.txt"))
 #---------------------------------
 #Process data
 #Specify dat to use
-dat <- bet_comps_annual
+
+# dat <- bet_comps_annual
+dat <- bet_numbers_annual
+
+# Error in VAST::Data_Fn(Version = Version, FieldConfig = FieldConfig, OverdispersionConfig = OverdispersionConfig,  : 
+#   Some years and/or categories have either all or no encounters, and this is not permissible when ObsModel_ez[,'Link']=0
+#Check missing values
 
 Data_Geostat <- data.frame(spp = as.character(dat$spp), 
                           Catch_num = dat$cpue,
@@ -153,7 +214,7 @@ SpatialDeltaGLMM::Plot_data_and_knots(Extrapolation_List = Extrapolation_List,
 TmbData = VAST::Data_Fn("Version" = Version, "FieldConfig" = FieldConfig, 
   "OverdispersionConfig" = OverdispersionConfig,  
   "RhoConfig" = RhoConfig, "ObsModel" = ObsModel, 
-  "c_i" = as.numeric(Data_Geostat$spp), 
+  "c_i" = as.numeric(Data_Geostat$spp) - 1, 
   "b_i" = Data_Geostat$Catch_num, 
   "a_i" = Data_Geostat$AreaSwept_km2, 
   "v_i" = as.numeric(Data_Geostat$Vessel) - 1, 
@@ -183,6 +244,39 @@ Report = Obj$report()
 Save = list("Opt"=Opt, "Report"=Report, "ParHat"=Obj$env$parList(Opt$par), "TmbData"=TmbData)
 save(Save, file=paste0(DateFile,"Save.RData"))
 save.image(paste0(DateFile,"Result.RData"))
+
+
+# Enc_prob = SpatialDeltaGLMM::Check_encounter_prob( Report=Report, Data_Geostat=Data_Geostat, DirName=DateFile)
+Q = SpatialDeltaGLMM::QQ_Fn( TmbData=TmbData, Report=Report, FileName_PP=paste0(DateFile,"Posterior_Predictive.jpg"), FileName_Phist=paste0(DateFile,"Posterior_Predictive-Histogram.jpg"), FileName_QQ=paste0(DateFile,"Q-Q_plot.jpg"), FileName_Qhist=paste0(DateFile,"Q-Q_hist.jpg"))
+
+MapDetails_List = SpatialDeltaGLMM::MapDetails_Fn( "Region"=Region, "NN_Extrap"=Spatial_List$PolygonList$NN_Extrap, "Extrapolation_List"=Extrapolation_List )
+MapDetails_List[["Cex"]] = 2
+# Decide which years to plot
+Year_Set = seq(min(Data_Geostat[,'Year']),max(Data_Geostat[,'Year']))
+Years2Include = which( Year_Set %in% sort(unique(Data_Geostat[,'Year'])))
+
+residuals <- SpatialDeltaGLMM:::plot_residuals(Lat_i=Data_Geostat[,'Lat'], Lon_i=Data_Geostat[,'Lon'], TmbData=TmbData, Report=Report, Q=Q, savedir=DateFile, MappingDetails=MapDetails_List[["MappingDetails"]], PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8)
+
+SpatialDeltaGLMM::PlotAniso_Fn( FileName=paste0(DateFile,"Aniso.png"), Report=Report, TmbData=TmbData )
+
+# # pre <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=1, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+# # # pos <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=2, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+density_xt <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=3, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+presence_xt <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=1, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+positive_xt <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=2, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+# # e_presence_xt <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=6, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+# # e_positive_xt <- SpatialDeltaGLMM::PlotResultsOnMap_Fn(plot_set=7, MappingDetails=MapDetails_List[["MappingDetails"]], Report=Report, Sdreport=Opt$SD, PlotDF=MapDetails_List[["PlotDF"]], MapSizeRatio=MapDetails_List[["MapSizeRatio"]], Xlim=MapDetails_List[["Xlim"]], Ylim=MapDetails_List[["Ylim"]], FileName=DateFile, Year_Set=Year_Set, Years2Include=Years2Include, Rotate=MapDetails_List[["Rotate"]], Cex=MapDetails_List[["Cex"]], Legend=MapDetails_List[["Legend"]], zone=MapDetails_List[["Zone"]], mar=c(0,0,2,0), oma=c(3.5,3.5,0,0), cex=1.8, plot_legend_fig=FALSE)
+# #
+Index = SpatialDeltaGLMM::PlotIndex_Fn( DirName=DateFile, TmbData=TmbData, Sdreport=Opt[["SD"]], Year_Set=Year_Set, Years2Include=Years2Include, strata_names="all_areas", use_biascorr=TRUE )
+# #
+SpatialDeltaGLMM::Plot_range_shifts(Report=Report, TmbData=TmbData, Sdreport=Opt[["SD"]], Znames=colnames(TmbData$Z_xm), PlotDir=DateFile, Year_Set=Year_Set)
+# #
+Plot_factors(Report = Report, ParHat = Obj$env$parList(), Data = TmbData, SD = Opt$SD, mapdetails_list = MapDetails_List,
+             Year_Set = Year_Set, category_names = c("L1","L2","L3","L4","L5"), plotdir = DateFile)
+
+Cov_List = Summarize_Covariance(Report = Report, ParHat = Obj$env$parList(), Data = TmbData, SD = Opt$SD, plot_cor = TRUE,
+                                category_names = levels(Data_Geostat[, "spp"]), plotdir = DateFile, plotTF = FieldConfig,
+                                mgp = c(2, 0.5, 0), tck = -0.02, oma = c(0, 5, 2, 2))
 
 
 

@@ -103,8 +103,30 @@ for(ii in the_bins$spp){
 
 #Treat certain length bins as species
 names(bet_comps_expd) <- tolower(names(bet_comps_expd))
+
+#Change frequency of all rows to 1 (because they are expanded)
+bet_comps_expd$freq <- 1
+sum(bet_comps_expd$freq) == sum(bet_comps$Freq)
+
+#Group on annual or seasonal time scales
 bet_comps_annual <- bet_comps_expd %>% group_by(lat, lon, year,
   spp) %>% summarize(cpue = sum(freq)) %>% as.data.frame
+bet_comps_seasonal <- bet_comps_expd %>% group_by(lat, lon, year, quarter, spp) %>%
+  summarize(cpue = sum(freq)) %>% as.data.frame
+
+#Complete the data frames by adding zeroes
+bet_complete_annual <- bet_comps_annual %>% complete(spp, nesting(lat, lon, year),
+  fill = list(cpue = 0)) %>% as.data.frame
+bet_complete_seasonal <- bet_comps_seasonal %>% complete(spp, nesting(lat, lon, year, quarter),
+  fill = list(cpue = 0)) %>% as.data.frame
+
+#Look at proportion of zeroes
+bet_complete_annual %>% filter(year >= 1986) %>% group_by( spp, year) %>% summarize(nzeroes = length(which(cpue == 0)),
+  nrows = length(cpue), prop_zeroes = nzeroes / nrows)
+
+bet_complete_seasonal %>% filter(year >= 1986) %>% group_by(spp, year, quarter) %>%
+  summarize(nzeroes = length(which(cpue == 0)), nrows = length(cpue), 
+    prop_zeroes = nzeroes / nrows) %>% ungroup() %>% select(prop_zeroes) %>% unique
 
 #Consider 'CPUE' to be numbers of fish
 #**might make this numbers/nhooks in the future**
@@ -122,17 +144,8 @@ bet_comps_annual <- bet_comps_expd %>% group_by(lat, lon, year,
 #Fill the missing values
 # bet_comps_annual
 
-bet_complete <- bet_comps_annual %>% complete(spp, nesting(lat, lon, year),
-  fill = list(cpue = 0)) %>% as.data.frame
 
-#Look at proportion of zeroes
-bet_complete %>% filter(year >= 1986) %>% group_by( spp, year) %>% summarize(nzeroes = length(which(cpue == 0)),
-  nrows = length(cpue), prop_zeroes = nzeroes / nrows) %>% as.data.frame
 
-bet_complete %>% group_by(lat, lon, spp, year) %>% summarize(nzeroes = length(which(cpue == 0)),
-  nrows = length(cpue), prop_zeroes = nzeroes / nrows) %>% as.data.frame
-
-bet_comps_annual
 
 #Overwrite old version with filled version
 bet_comps_annual <- bet_complete %>% filter(year >= 1986)

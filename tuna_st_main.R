@@ -144,15 +144,15 @@ bet_complete_seasonal %>% filter(year >= 1986) %>% group_by(spp, year, quarter) 
 #Fill the missing values
 # bet_comps_annual
 
-
-
-
 #Overwrite old version with filled version
-bet_comps_annual <- bet_complete %>% filter(year >= 1986)
+bet_comps_annual <- bet_complete_annual %>% filter(year >= 1986)
 # unique(bet_comps_annual$year)[order(unique(bet_comps_annual$year))]
 
 #-----------------------------------------------------------------------------------------------------
 #VAST Model
+
+#Link for handling zero or 100 percent encounter probability
+# https://github.com/nwfsc-assess/geostatistical_delta-GLMM/wiki/What-to-do-with-a-species-with-0%25-or-100%25-encounters-in-any-year
 
 #---------------------------------
 #Initial configurations
@@ -165,11 +165,10 @@ Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 #Specify spatial and temporal autocorrelation
 #Fieldconfig is 5 because there are five size categories
 # FieldConfig <- c("Omega1"=5, "Epsilon1"=5, "Omega2"=5, "Epsilon2"=5) 
-FieldConfig <- c("Omega1"=1, "Epsilon1"=1, "Omega2"=1, "Epsilon2"=1) 
+FieldConfig <- c("Omega1"=1, "Epsilon1"=1, "Omega2"=1, "Epsilon2"=1) #spatiotemporal variation
 RhoConfig <- c("Beta1"=0, "Beta2"=0, "Epsilon1"=0, "Epsilon2"=0) #Parameters among years
-OverdispersionConfig <- c("Vessel"=0, "VesselYear"=0)
-ObsModel <- c(2, 0) #Gamma distributed catch rates, encounter probabilities conventional
-#delta model
+OverdispersionConfig <- c("Vessel"=0, "VesselYear"=0)  #Different vessel catchabilities, 0 means they the same
+ObsModel <- c(1, 3) #lognormal disributed then fix the intercept if necessary
 
 #Specify options
 Options <- c("SD_site_density"=0, "SD_site_logdensity"=0, "Calculate_Range"=1,
@@ -179,7 +178,7 @@ Options <- c("SD_site_density"=0, "SD_site_logdensity"=0, "Calculate_Range"=1,
 strata.limits <- data.frame('STRATA'="EPO")
 Region <- "Other"
 
-DateFile = paste0(getwd(),"/VAST_output_YFT_comp/")
+DateFile = paste0(getwd(),"/VAST_output_bet_comp/")
 dir.create(DateFile)
 
 #Save configurations
@@ -191,8 +190,13 @@ capture.output( Record, file=paste0(DateFile,"Record.txt"))
 #Process data
 #Specify dat to use
 
-# dat <- bet_comps_annual
-dat <- bet_numbers_annual
+dat <- bet_comps_annual
+
+#Check data availability for each location
+distinct()
+
+
+# dat <- bet_numbers_annual
 
 # Error in VAST::Data_Fn(Version = Version, FieldConfig = FieldConfig, OverdispersionConfig = OverdispersionConfig,  : 
 #   Some years and/or categories have either all or no encounters, and this is not permissible when ObsModel_ez[,'Link']=0

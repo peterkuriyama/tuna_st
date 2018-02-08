@@ -2,7 +2,6 @@
 #Set working directory based on computer I'm using
 setwd("C:\\Users\\Peter\\Dropbox\\postdoc\\tuna_st")
 if(Sys.info()[1] == 'Windows') setwd('\\Users\\peter.kuriyama\\Desktop\\tuna_st')
-
 if(Sys.info()[1] != 'Windows') setwd('/Users/peterkuriyama/Dropbox/postdoc/tuna_st')
 
 #-----------------------------------------------------------------------------------------------------
@@ -47,6 +46,8 @@ grid_size_km <- 10
 n_x <- c(10, 45, 100, 200, 1000)[1] #number of stations
 Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 
+#Specify number of species
+nspp <- 1
 
 #------------FieldConfig
 #Omega refers to spatial variation
@@ -55,7 +56,7 @@ Kmeans_Config <-  list( "randomseed"=1, "nstart"=100, "iter.max"=1e3 )
 #Epsilon is spatiotemporal variation
 #AR1 is an AR1 process
 #>0 is number of elements in factor-analysis covariance
-FieldConfig <- c("Omega1"=1, "Epsilon1"=1, "Omega2"=1, "Epsilon2"=1) #
+FieldConfig <- c("Omega1"= nspp, "Epsilon1"=nspp, "Omega2"=nspp, "Epsilon2"=nspp) #
 
 #------------Rhoconfig
 #Specify structure of time intervals (fixed effect or random effect)
@@ -93,8 +94,15 @@ Region <- "Other"
 
 #Look at number of zeroes 
 
-run_vast(dat = the_data$bet_numbers_annual, 
+run_vast(dat = the_data[[1]], 
   ObsModel = c(1, 0))
+
+head(the_data[[1]])
+
+the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(aes(fill = cpue))  +
+  facet_wrap(~year)
+
+the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(fill = 'white') + facet_wrap(~ year)
 
 #---------------------------------
 run_vast <- function(dat, ObsModel){
@@ -132,9 +140,9 @@ run_vast <- function(dat, ObsModel){
   
   # Add knots to Data_Geostat
   Data_Geostat = cbind(Data_Geostat, "knot_i"=Spatial_List$knot_i)
-  # SpatialDeltaGLMM::Plot_data_and_knots(Extrapolation_List = Extrapolation_List,
-  #  Spatial_List = Spatial_List, Data_Geostat = Data_Geostat, PlotDir = DateFile)
-  
+  SpatialDeltaGLMM::Plot_data_and_knots(Extrapolation_List = Extrapolation_List,
+   Spatial_List = Spatial_List, Data_Geostat = Data_Geostat, PlotDir = DateFile)
+browser()
   #---------------------------------
   #Run the model
   TmbData = VAST::Data_Fn("Version" = Version, "FieldConfig" = FieldConfig, 
@@ -198,8 +206,8 @@ Spatial_List = Spatial_Information_Fn( grid_size_km = grid_size_km, n_x = n_x,
 
 # Add knots to Data_Geostat
 Data_Geostat = cbind(Data_Geostat, "knot_i"=Spatial_List$knot_i)
-# SpatialDeltaGLMM::Plot_data_and_knots(Extrapolation_List = Extrapolation_List,
-#  Spatial_List = Spatial_List, Data_Geostat = Data_Geostat, PlotDir = DateFile)
+SpatialDeltaGLMM::Plot_data_and_knots(Extrapolation_List = Extrapolation_List,
+ Spatial_List = Spatial_List, Data_Geostat = Data_Geostat, PlotDir = DateFile)
 
 #---------------------------------
 #Run the model

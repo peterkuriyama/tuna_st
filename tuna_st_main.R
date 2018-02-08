@@ -33,6 +33,16 @@ hist(the_data[[2]]$cpue, breaks = 50)
 head(the_data[[2]])
 
 #-----------------------------------------------------------------------------------------------------
+#Plot the data on a map
+mapdata()
+
+
+the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(aes(fill = cpue))  +
+  facet_wrap(~year)
+
+the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(fill = 'white') + facet_wrap(~ year)
+
+#-----------------------------------------------------------------------------------------------------
 #VAST Model
 
 #Link for handling zero or 100 percent encounter probability
@@ -99,10 +109,6 @@ run_vast(dat = the_data[[1]],
 
 head(the_data[[1]])
 
-the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(aes(fill = cpue))  +
-  facet_wrap(~year)
-
-the_data[[1]] %>% ggplot(aes(x = lon, y = lat)) + geom_tile(fill = 'white') + facet_wrap(~ year)
 
 #---------------------------------
 run_vast <- function(dat, ObsModel){
